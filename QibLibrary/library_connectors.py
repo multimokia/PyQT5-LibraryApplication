@@ -23,7 +23,11 @@ from collections.abc import (
     Sequence,
     Mapping
 )
-from dataclasses import dataclass, asdict
+from dataclasses import (
+    dataclass,
+    asdict,
+    KW_ONLY
+)
 from pathlib import Path
 import sqlite3
 from types import MappingProxyType
@@ -35,7 +39,7 @@ from typing import (
 )
 
 
-@dataclass(frozen=True, kw_only=True, slots=True)
+@dataclass(frozen=True, slots=True)
 class Book():
     """
     Represents a book
@@ -43,6 +47,7 @@ class Book():
     title: str
     author: str
     year: int
+    KW_ONLY# pylint: disable=pointless-statement
     categories: Set[str] | None = None
     coauthors: Set[str] | None = None
 
@@ -184,51 +189,57 @@ class SQLiteLibraryConnector(AbstractLibraryConnector):
     """
     An implementation of sql library connecter for sqlite
     """
-    _INIT_SCRIPT = """\
+    _TABLE_BOOKS = "books"
+    _TABLE_CATS = "categories"
+    _TABLE_COAUTHORS = "coauthors"
+    _TABLE_J_BOOK_CAT = "j_book_category"
+    _TABLE_J_BOOK_COAUTHOR = "j_book_coauthor"
+
+    _INIT_SCRIPT = f"""\
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE IF NOT EXISTS books (
+CREATE TABLE IF NOT EXISTS {_TABLE_BOOKS} (
     title TEXT NOT NULL,
     author TEXT NOT NULL,
     year INT NOT NULL CHECK (year > 0),
     CONSTRAINT pk PRIMARY KEY (title, author, year)
 );
 
-CREATE TABLE IF NOT EXISTS categories (
+CREATE TABLE IF NOT EXISTS {_TABLE_CATS} (
     name TEXT NOT NULL PRIMARY KEY
 );
 
-CREATE TABLE IF NOT EXISTS coauthors (
+CREATE TABLE IF NOT EXISTS {_TABLE_COAUTHORS} (
     name TEXT NOT NULL PRIMARY KEY
 );
 
-CREATE TABLE IF NOT EXISTS j_book_category (
+CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_CAT} (
     title TEXT NOT NULL,
     author TEXT NOT NULL,
     year INT NOT NULL,
     category TEXT NOT NULL,
     FOREIGN KEY (title, author, year)
-        REFERENCES books (title, author, year)
+        REFERENCES {_TABLE_BOOKS} (title, author, year)
         ON UPDATE CASCADE
         ON DELETE CASCADE,
     FOREIGN KEY (category)
-        REFERENCES categories (name)
+        REFERENCES {_TABLE_CATS} (name)
         ON UPDATE CASCADE
         ON DELETE CASCADE,
     CONSTRAINT pk PRIMARY KEY (title, author, year, category)
 );
 
-CREATE TABLE IF NOT EXISTS j_book_coauthor (
+CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
     title TEXT NOT NULL,
     author TEXT NOT NULL,
     year INT NOT NULL,
     coauthor TEXT NOT NULL,
     FOREIGN KEY (title, author, year)
-        REFERENCES books (title, author, year)
+        REFERENCES {_TABLE_BOOKS} (title, author, year)
         ON UPDATE CASCADE
         ON DELETE CASCADE,
     FOREIGN KEY (coauthor)
-        REFERENCES coauthors (name)
+        REFERENCES {_TABLE_COAUTHORS} (name)
         ON UPDATE CASCADE
         ON DELETE CASCADE,
     CONSTRAINT pk PRIMARY KEY (title, author, year, coauthor)
@@ -258,6 +269,12 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         self._connection.executescript(self._INIT_SCRIPT)
         self._connection.commit()
 
+    def close(self) -> None:
+        """
+        Closes connection to the db
+        """
+        self.__del__()
+
     def _has_table(self, name: str) -> bool:
         query = (
             "SELECT COUNT(1) FROM sqlite_master "
@@ -271,7 +288,7 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 
         if not full_check:
             stmt = (
-                "SELECT COUNT(1) FROM books "
+                f"SELECT COUNT(1) FROM {self._TABLE_BOOKS} "
                 "WHERE title=? AND author=? AND year=?;"
             )
             values = (book.title, book.author, book.year)
@@ -289,13 +306,13 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
                 coauthors = ()
             coauthors_q_marks = ", ".join("?"*len(coauthors))
 
-            select = "SELECT COUNT(1) FROM books b "
+            select = f"SELECT COUNT(1) FROM {self._TABLE_BOOKS} b "
             join_cat = (
-                "JOIN j_book_category jc "
+                f"JOIN {self._TABLE_J_BOOK_CAT} jc "
                 "ON b.title=jc.title AND b.author=jc.author AND b.year=jc.year "
             )
             join_coauthor = (
-                "JOIN j_book_coauthor ja "
+                f"JOIN {self._TABLE_J_BOOK_COAUTHOR} ja "
                 "ON b.title=ja.title AND b.author=ja.author AND b.year=ja.year "
             )
             where = (
@@ -326,6 +343,11 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
             return False
 
         total_entries = cur.fetchone()[0]
+
+        # if it's a quick check, we can return earlier
+        if not full_check:
+            return total_entries > 0
+
         # we need to use a min values of 1 even if we don't have a cat/co-author
         i = max(len(cats), 1)
         j = max(len(coauthors), 1)
@@ -340,14 +362,17 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         cur = self._connection.cursor()
         try:
             # Add the book
-            ins_book_stmt = "INSERT INTO books (title, author, year) VALUES (?, ?, ?);"
+            ins_book_stmt = (
+                f"INSERT INTO {self._TABLE_BOOKS} (title, author, year) "
+                "VALUES (?, ?, ?);"
+            )
             ins_book_values = (book.title, book.author, book.year)
             cur.execute(ins_book_stmt, ins_book_values)
 
             if book.categories:
                 # Add the categories
                 ins_cat_stmt = (
-                    "INSERT INTO categories (name) VALUES (?) "
+                    f"INSERT INTO {self._TABLE_CATS} (name) VALUES (?) "
                     "ON CONFLICT DO NOTHING;"
                 )
                 ins_cat_values = ((cat,) for cat in book.categories)
@@ -356,7 +381,7 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
                 # Add the cats to the junction table
                 ins_j_book_cat_stmt = (
                     (
-                        "INSERT INTO j_book_category (title, author, year, category) "
+                        f"INSERT INTO {self._TABLE_J_BOOK_CAT} (title, author, year, category) "
                         "VALUES (?, ?, ?, ?) "
                         "ON CONFLICT DO NOTHING;"
                     )
@@ -370,7 +395,7 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
             if book.coauthors:
                 # Add the coauthors
                 ins_coauthors_stmt = (
-                    "INSERT INTO coauthors (name) VALUES (?) "
+                    f"INSERT INTO {self._TABLE_COAUTHORS} (name) VALUES (?) "
                     "ON CONFLICT DO NOTHING;"
                 )
                 ins_coauthors_values = ((name,) for name in book.coauthors)
@@ -379,7 +404,7 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
                 # Add the coauthors to the junction table
                 ins_j_book_coauthor_stmt = (
                     (
-                        "INSERT INTO j_book_coauthor (title, author, year, coauthor) "
+                        f"INSERT INTO {self._TABLE_J_BOOK_COAUTHOR} (title, author, year, coauthor) "# pylint: disable=line-too-long
                         "VALUES (?, ?, ?, ?) "
                         "ON CONFLICT DO NOTHING;"
                     )
@@ -409,7 +434,7 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
             # cleared automatically, while the categories and coauthors
             # won't, but we don't care for those extra bits of data
             del_books_stmt = (
-                "DELETE FROM books "
+                f"DELETE FROM {self._TABLE_BOOKS} "
                 "WHERE title=? AND author=? AND year=?;"
             )
             del_books_values = (book.title, book.author, book.year)
@@ -465,11 +490,11 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
                 year = row[2]
 
                 get_cats_stmt = (
-                    "SELECT category FROM j_book_category "
+                    f"SELECT category FROM {self._TABLE_J_BOOK_CAT} "
                     "WHERE title=? AND author=? AND year=?;"
                 )
                 get_coauthors_stmt = (
-                    "SELECT coauthor FROM j_book_coauthor "
+                    f"SELECT coauthor FROM {self._TABLE_J_BOOK_COAUTHOR} "
                     "WHERE title=? AND author=? AND year=?;"
                 )
                 values = (title, author, year)
@@ -495,13 +520,13 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         return tuple(books)
 
     def search_title(self, query: str) -> Sequence[Book]:
-        stmt = "SELECT * FROM books WHERE title=?;"
+        stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE title=?;"
         values = (query,)
 
         return self._execute_search(stmt, values)
 
     def search_author(self, query: str) -> Sequence[Book]:
-        stmt = "SELECT * FROM books WHERE author=?;"
+        stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE author=?;"
         values = (query,)
 
         return self._execute_search(stmt, values)
@@ -510,11 +535,11 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         values: tuple[int] | tuple[int, int]
 
         if isinstance(query, (tuple, list)):
-            stmt = "SELECT * FROM books WHERE year BETWEEN ? AND ?;"
+            stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE year BETWEEN ? AND ?;"
             values = (query[0], query[1])
 
         else:
-            stmt = "SELECT * FROM books WHERE year=?;"
+            stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE year=?;"
             values = (query,)
 
         return self._execute_search(stmt, values)
@@ -525,8 +550,8 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
             q_marks = ", ".join("?"*len(query))
             # We need DISTINCT since a book can have several categories and we don't need dupes
             stmt = (
-                "SELECT DISTINCT b.title, b.author, b.year FROM books b "
-                "JOIN j_book_category junction "
+                f"SELECT DISTINCT b.title, b.author, b.year FROM {self._TABLE_BOOKS} b "
+                f"JOIN {self._TABLE_J_BOOK_CAT} junction "
                 "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
                 f"WHERE junction.category IN ({q_marks});"
             )
@@ -534,8 +559,8 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 
         else:
             stmt = (
-                "SELECT b.title, b.author, b.year FROM books b "
-                "JOIN j_book_category junction "
+                f"SELECT b.title, b.author, b.year FROM {self._TABLE_BOOKS} b "
+                f"JOIN {self._TABLE_J_BOOK_CAT} junction "
                 "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
                 "WHERE junction.category=?;"
             )
@@ -547,8 +572,8 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         if isinstance(query, (Set, tuple, list)):
             q_marks = ", ".join("?"*len(query))
             stmt = (
-                "SELECT DISTINCT b.title, b.author, b.year FROM books b "
-                "JOIN j_book_coauthor junction "
+                f"SELECT DISTINCT b.title, b.author, b.year FROM {self._TABLE_BOOKS} b "
+                f"JOIN {self._TABLE_J_BOOK_COAUTHOR} junction "
                 "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
                 f"WHERE junction.coauthor IN ({q_marks});"
             )
@@ -556,8 +581,8 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 
         else:
             stmt = (
-                "SELECT b.title, b.author, b.year FROM books b "
-                "JOIN j_book_coauthor junction "
+                f"SELECT b.title, b.author, b.year FROM {self._TABLE_BOOKS} b "
+                f"JOIN {self._TABLE_J_BOOK_COAUTHOR} junction "
                 "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
                 "WHERE junction.coauthor=?;"
             )
