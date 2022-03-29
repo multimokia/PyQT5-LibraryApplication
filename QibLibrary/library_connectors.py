@@ -520,13 +520,13 @@ CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
         return tuple(books)
 
     def search_title(self, query: str) -> Sequence[Book]:
-        stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE title=?;"
+        stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE title=? COLLATE NOCASE;"
         values = (query,)
 
         return self._execute_search(stmt, values)
 
     def search_author(self, query: str) -> Sequence[Book]:
-        stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE author=?;"
+        stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE author=? COLLATE NOCASE;"
         values = (query,)
 
         return self._execute_search(stmt, values)
@@ -553,7 +553,7 @@ CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
                 f"SELECT DISTINCT b.title, b.author, b.year FROM {self._TABLE_BOOKS} b "
                 f"JOIN {self._TABLE_J_BOOK_CAT} junction "
                 "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
-                f"WHERE junction.category IN ({q_marks});"
+                f"WHERE junction.category COLLATE NOCASE IN ({q_marks});"
             )
             values = tuple(query)
 
@@ -562,7 +562,7 @@ CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
                 f"SELECT b.title, b.author, b.year FROM {self._TABLE_BOOKS} b "
                 f"JOIN {self._TABLE_J_BOOK_CAT} junction "
                 "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
-                "WHERE junction.category=?;"
+                "WHERE junction.category=? COLLATE NOCASE;"
             )
             values = (query,)
 
@@ -575,7 +575,7 @@ CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
                 f"SELECT DISTINCT b.title, b.author, b.year FROM {self._TABLE_BOOKS} b "
                 f"JOIN {self._TABLE_J_BOOK_COAUTHOR} junction "
                 "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
-                f"WHERE junction.coauthor IN ({q_marks});"
+                f"WHERE junction.coauthor COLLATE NOCASE IN ({q_marks});"
             )
             values = tuple(query)
 
@@ -584,7 +584,7 @@ CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
                 f"SELECT b.title, b.author, b.year FROM {self._TABLE_BOOKS} b "
                 f"JOIN {self._TABLE_J_BOOK_COAUTHOR} junction "
                 "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
-                "WHERE junction.coauthor=?;"
+                "WHERE junction.coauthor=? COLLATE NOCASE;"
             )
             values = (query,)
 
