@@ -62,6 +62,8 @@ class Book():
 
 _STR_QUERY: TypeAlias = str
 _YEAR_QUERY: TypeAlias = Union[int, tuple[int, int]]# mypy doesn't like | here
+_CAT_QUERY: TypeAlias = str | Set[str]
+_COAUTHOR_QUERY: TypeAlias = _CAT_QUERY
 
 # pylint: disable=unnecessary-ellipsis
 class AbstractLibraryConnector(ABC):
@@ -147,9 +149,22 @@ class AbstractLibraryConnector(ABC):
         ...
 
     @abstractmethod
-    def search_category(self, query: _STR_QUERY) -> Sequence[Book]:
+    def search_category(self, query: _CAT_QUERY) -> Sequence[Book]:
         """
         Searches for books by categories using the given query
+
+        IN:
+            query - the search query
+
+        OUT:
+            sequence of appropriate books
+        """
+        ...
+
+    @abstractmethod
+    def search_coauthor(self, query: _COAUTHOR_QUERY) -> Sequence[Book]:
+        """
+        Searches for books by coauthors using the given query
 
         IN:
             query - the search query
@@ -338,6 +353,16 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         ...
 
     def _execute_get_sub_attrs(self, stmt, values) -> frozenset[Any]:
+        """
+        Method to retrieve sub attributes (like co-authors/categories)
+
+        IN:
+            stmt - the sql statement to use
+            values - the values for substitution
+
+        OUT:
+            frozenset with the book attributes
+        """
         try:
             cur = self._connection.execute(stmt, values)
 
@@ -348,7 +373,17 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 
         return frozenset(data[0] for data in cur.fetchall())
 
-    def _execute_search_main_attrs(self, stmt: str, values: Sequence[Any]) -> Sequence[Book]:
+    def _execute_search(self, stmt: str, values: Sequence[Any]) -> Sequence[Book]:
+        """
+        Method to retrieve books
+
+        IN:
+            stmt - the sql statement to use
+            values - the values for substitution
+
+        OUT:
+            sequence of books
+        """
         books: list[Book] = []
 
         try:
@@ -358,8 +393,14 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
                 author = row[1]
                 year = row[2]
 
-                get_cats_stmt = "SELECT category FROM j_book_category WHERE title=? AND author=? AND year=?;"
-                get_coauthors_stmt = "SELECT coauthor FROM j_book_coauthor WHERE title=? AND author=? AND year=?;"
+                get_cats_stmt = (
+                    "SELECT category FROM j_book_category "
+                    "WHERE title=? AND author=? AND year=?;"
+                )
+                get_coauthors_stmt = (
+                    "SELECT coauthor FROM j_book_coauthor "
+                    "WHERE title=? AND author=? AND year=?;"
+                )
                 values = (title, author, year)
 
                 categories = self._execute_get_sub_attrs(get_cats_stmt, values)
@@ -387,16 +428,16 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         stmt = "SELECT * FROM books WHERE title LIKE ?;"
         values = (query,)
 
-        return self._execute_search_main_attrs(stmt, values)
+        return self._execute_search(stmt, values)
 
     def search_author(self, query: str) -> Sequence[Book]:
         query = f"%{query}%"
         stmt = "SELECT * FROM books WHERE author LIKE ?;"
         values = (query,)
 
-        return self._execute_search_main_attrs(stmt, values)
+        return self._execute_search(stmt, values)
 
-    def search_year(self, query) -> Sequence[Book]:
+    def search_year(self, query: _YEAR_QUERY) -> Sequence[Book]:
         values: tuple[int] | tuple[int, int]
 
         if isinstance(query, (tuple, list)):
@@ -407,10 +448,53 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
             stmt = "SELECT * FROM books WHERE year=?;"
             values = (query,)
 
-        return self._execute_search_main_attrs(stmt, values)
+        return self._execute_search(stmt, values)
 
-    def search_category(self, query: _STR_QUERY) -> Sequence[Book]:
-        ...
+    def search_category(self, query: _CAT_QUERY) -> Sequence[Book]:
+        if isinstance(query, (Set, tuple, list)):
+            # Need multiple params since we got multiple cats to check for
+            q_marks = ", ".join("?"*len(query))
+            # We need DISTINCT since a book can have several categories and we don't need dupes
+            stmt = (
+                "SELECT DISTINCT b.title, b.author, b.year FROM books b "
+                "JOIN j_book_category junction "
+                "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
+                f"WHERE junction.category IN ({q_marks});"
+            )
+            values = tuple(query)
+
+        else:
+            stmt = (
+                "SELECT b.title, b.author, b.year FROM books b "
+                "JOIN j_book_category junction "
+                "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
+                "WHERE junction.category=?;"
+            )
+            values = (query,)
+
+        return self._execute_search(stmt, values)
+
+    def search_coauthor(self, query: _COAUTHOR_QUERY) -> Sequence[Book]:
+        if isinstance(query, (Set, tuple, list)):
+            q_marks = ", ".join("?"*len(query))
+            stmt = (
+                "SELECT DISTINCT b.title, b.author, b.year FROM books b "
+                "JOIN j_book_coauthor junction "
+                "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
+                f"WHERE junction.coauthor IN ({q_marks});"
+            )
+            values = tuple(query)
+
+        else:
+            stmt = (
+                "SELECT b.title, b.author, b.year FROM books b "
+                "JOIN j_book_coauthor junction "
+                "ON b.title=junction.title AND b.author=junction.author AND b.year=junction.year "
+                "WHERE junction.coauthor=?;"
+            )
+            values = (query,)
+
+        return self._execute_search(stmt, values)
 
 
 
@@ -422,8 +506,8 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 
 
 # c = SQLiteLibraryConnector(":memory:")
-# b1 = Book(title="Python 101", author="Monika", year=2023, coauthors={"Boop"}, categories={"programming", "python"})
-# b2 = Book(title="SQLite for dummies", author="Boop", year=2022, categories={"programming", "sql", "science"})
+# b1 = Book(title="Python 101", author="Monika", year=2023, coauthors={"Boop"}, categories={"programming", "python", "language"})
+# b2 = Book(title="SQLite for dummies", author="Boop", year=2022, categories={"programming", "sql", "language"})
 # b3 = Book(title="Love", author="Monika", year=2024, categories={"romance", "novel"})
 
 # def execute(stmt):
@@ -458,8 +542,12 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 # # execute("SELECT * FROM books WHERE title LIKE 'Love';")
 
 
-# print(c.search_author("moni"))
-# print(c.search_author("boop"))
-# print(c.search_title("love"))
-# print(c.search_year(2022))
-# print(c.search_year((2020, 2025)))
+# # print(c.search_author("moni"))
+# # print(c.search_author("boop"))
+# # print(c.search_title("love"))
+# # print(c.search_year(2022))
+# # print(c.search_year((2020, 2025)))
+# print(c.search_category("programming"))
+# print(c.search_category("sql"))
+# print(c.search_category("python"))
+# print(c.search_category({"language", "programming"}))
