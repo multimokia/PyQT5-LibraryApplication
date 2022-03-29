@@ -495,15 +495,13 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         return tuple(books)
 
     def search_title(self, query: str) -> Sequence[Book]:
-        query = f"%{query}%"
-        stmt = "SELECT * FROM books WHERE title LIKE ?;"
+        stmt = "SELECT * FROM books WHERE title=?;"
         values = (query,)
 
         return self._execute_search(stmt, values)
 
     def search_author(self, query: str) -> Sequence[Book]:
-        query = f"%{query}%"
-        stmt = "SELECT * FROM books WHERE author LIKE ?;"
+        stmt = "SELECT * FROM books WHERE author=?;"
         values = (query,)
 
         return self._execute_search(stmt, values)
