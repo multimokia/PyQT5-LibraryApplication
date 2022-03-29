@@ -28,7 +28,9 @@ from pathlib import Path
 import sqlite3
 from types import MappingProxyType
 from typing import (
+    TypeAlias,
     Literal,
+    Union,
     Any
 )
 
@@ -57,6 +59,9 @@ class Book():
         """
         return cls(**dict_)
 
+
+_STR_QUERY: TypeAlias = str
+_YEAR_QUERY: TypeAlias = Union[int, tuple[int, int]]# mypy doesn't like | here
 
 # pylint: disable=unnecessary-ellipsis
 class AbstractLibraryConnector(ABC):
@@ -103,20 +108,7 @@ class AbstractLibraryConnector(ABC):
         ...
 
     @abstractmethod
-    def _search(self, field: str, query: str) -> Sequence[Book]:
-        """
-        Searches for books using the given field and query
-
-        IN:
-            field - the search field
-            query - the search query
-
-        OUT:
-            sequence of appropriate books
-        """
-        ...
-
-    def search_title(self, query: str) -> Sequence[Book]:
+    def search_title(self, query: _STR_QUERY) -> Sequence[Book]:
         """
         Searches for books by title using the given query
 
@@ -126,9 +118,10 @@ class AbstractLibraryConnector(ABC):
         OUT:
             sequence of appropriate books
         """
-        return self._search("title", query)
+        ...
 
-    def search_author(self, query: str) -> Sequence[Book]:
+    @abstractmethod
+    def search_author(self, query: _STR_QUERY) -> Sequence[Book]:
         """
         Searches for books by author using the given query
 
@@ -138,9 +131,23 @@ class AbstractLibraryConnector(ABC):
         OUT:
             sequence of appropriate books
         """
-        return self._search("author", query)
+        ...
 
-    def search_category(self, query: str) -> Sequence[Book]:
+    @abstractmethod
+    def search_year(self, query: _YEAR_QUERY) -> Sequence[Book]:
+        """
+        Searches for books by year using the given query
+
+        IN:
+            query - the search query
+
+        OUT:
+            sequence of appropriate books
+        """
+        ...
+
+    @abstractmethod
+    def search_category(self, query: _STR_QUERY) -> Sequence[Book]:
         """
         Searches for books by categories using the given query
 
@@ -150,7 +157,7 @@ class AbstractLibraryConnector(ABC):
         OUT:
             sequence of appropriate books
         """
-        return self._search("categories", query)
+        ...
 # pylint: enable=unnecessary-ellipsis
 
 
@@ -160,7 +167,7 @@ class SQLiteLibraryConnector(AbstractLibraryConnector):
     """
     An implementation of sql library connecter for sqlite
     """
-    _CREATE_TABLE_STATEMENT = """\
+    _INIT_SCRIPT = """\
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS books (
@@ -222,7 +229,17 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         self._db_path = db_path
         self._connection = sqlite3.connect(db_path, **kwargs)
 
-        self._create_tables()
+        self._init_db()
+
+    def __del__(self) -> None:
+        self._connection.close()
+
+    def _init_db(self) -> None:
+        """
+        Inits sqlite + tables
+        """
+        self._connection.executescript(self._INIT_SCRIPT)
+        self._connection.commit()
 
     def _has_table(self, name: str) -> bool:
         query = (
@@ -231,10 +248,6 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         )
         cur = self._connection.execute(query, (name,))
         return cur.fetchone()[0] > 0
-
-    def _create_tables(self) -> None:
-        self._connection.executescript(self._CREATE_TABLE_STATEMENT)
-        self._connection.commit()
 
     def add_book(self, book: Book) -> bool:
         cur = self._connection.cursor()
@@ -246,13 +259,20 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 
             if book.categories:
                 # Add the categories
-                ins_cat_stmt = "INSERT INTO categories (name) VALUES (?);"
+                ins_cat_stmt = (
+                    "INSERT INTO categories (name) VALUES (?) "
+                    "ON CONFLICT DO NOTHING;"
+                )
                 ins_cat_values = ((cat,) for cat in book.categories)
                 cur.executemany(ins_cat_stmt, ins_cat_values)
 
                 # Add the cats to the junction table
                 ins_j_book_cat_stmt = (
-                    "INSERT INTO j_book_category (title, author, year, category) VALUES (?, ?, ?, ?);"
+                    (
+                        "INSERT INTO j_book_category (title, author, year, category) "
+                        "VALUES (?, ?, ?, ?) "
+                        "ON CONFLICT DO NOTHING;"
+                    )
                 )
                 ins_j_book_cat_values = (
                     (book.title, book.author, book.year, cat)
@@ -262,13 +282,20 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 
             if book.coauthors:
                 # Add the coauthors
-                ins_coauthors_stmt = "INSERT INTO coauthors (name) VALUES (?);"
+                ins_coauthors_stmt = (
+                    "INSERT INTO coauthors (name) VALUES (?) "
+                    "ON CONFLICT DO NOTHING;"
+                )
                 ins_coauthors_values = ((name,) for name in book.coauthors)
                 cur.executemany(ins_coauthors_stmt, ins_coauthors_values)
 
                 # Add the coauthors to the junction table
                 ins_j_book_coauthor_stmt = (
-                    "INSERT INTO j_book_coauthor (title, author, year, coauthor) VALUES (?, ?, ?, ?);"
+                    (
+                        "INSERT INTO j_book_coauthor (title, author, year, coauthor) "
+                        "VALUES (?, ?, ?, ?) "
+                        "ON CONFLICT DO NOTHING;"
+                    )
                 )
                 ins_j_book_coauthor_values = (
                     (book.title, book.author, book.year, name)
@@ -276,36 +303,163 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
                 )
                 cur.executemany(ins_j_book_coauthor_stmt, ins_j_book_coauthor_values)
 
-            # Commit the changes
-            self._connection.commit()
-
         except sqlite3.Error as e:# pylint: disable=invalid-name
+            self._connection.rollback()
             print(e)# TODO: add logging pls
             return False
 
+        # Commit the changes
+        self._connection.commit()
         return True
 
     def remove_book(self, book: Book) -> bool:
-        ...
+        cur = self._connection.cursor()
+        try:
+            # We only need to explicitly delete from the books table
+            # j_book_category and j_book_coauthor will be
+            # cleared automatically, while the categories and coauthors
+            # won't, but we don't care for those extra bits of data
+            del_books_stmt = (
+                "DELETE FROM books "
+                "WHERE title=? AND author=? AND year=?;"
+            )
+            del_books_values = (book.title, book.author, book.year)
+            cur.execute(del_books_stmt, del_books_values)
+
+        except sqlite3.Error as e:# pylint: disable=invalid-name
+            self._connection.rollback()
+            print(e)
+            return False
+
+        self._connection.commit()
+        return True
 
     def has_book(self, book: Book) -> bool:
         ...
 
-    def _search(self, field: str, query: str) -> Sequence[Book]:
+    def _execute_get_sub_attrs(self, stmt, values) -> frozenset[Any]:
+        try:
+            cur = self._connection.execute(stmt, values)
+
+        except sqlite3.Error as e:# pylint: disable=invalid-name
+            self._connection.rollback()
+            print(e)
+            return frozenset()
+
+        return frozenset(data[0] for data in cur.fetchall())
+
+    def _execute_search_main_attrs(self, stmt: str, values: Sequence[Any]) -> Sequence[Book]:
+        books: list[Book] = []
+
+        try:
+            cur = self._connection.execute(stmt, values)
+            for row in cur:
+                title = row[0]
+                author = row[1]
+                year = row[2]
+
+                get_cats_stmt = "SELECT category FROM j_book_category WHERE title=? AND author=? AND year=?;"
+                get_coauthors_stmt = "SELECT coauthor FROM j_book_coauthor WHERE title=? AND author=? AND year=?;"
+                values = (title, author, year)
+
+                categories = self._execute_get_sub_attrs(get_cats_stmt, values)
+                coauthors = self._execute_get_sub_attrs(get_coauthors_stmt, values)
+
+                books.append(
+                    Book(
+                        title=title,
+                        author=author,
+                        year=year,
+                        categories=categories,
+                        coauthors=coauthors
+                    )
+                )
+
+        except sqlite3.Error as e:# pylint: disable=invalid-name
+            self._connection.rollback()
+            print(e)
+            return ()
+
+        return tuple(books)
+
+    def search_title(self, query: str) -> Sequence[Book]:
+        query = f"%{query}%"
+        stmt = "SELECT * FROM books WHERE title LIKE ?;"
+        values = (query,)
+
+        return self._execute_search_main_attrs(stmt, values)
+
+    def search_author(self, query: str) -> Sequence[Book]:
+        query = f"%{query}%"
+        stmt = "SELECT * FROM books WHERE author LIKE ?;"
+        values = (query,)
+
+        return self._execute_search_main_attrs(stmt, values)
+
+    def search_year(self, query) -> Sequence[Book]:
+        values: tuple[int] | tuple[int, int]
+
+        if isinstance(query, (tuple, list)):
+            stmt = "SELECT * FROM books WHERE year BETWEEN ? AND ?;"
+            values = (query[0], query[1])
+
+        else:
+            stmt = "SELECT * FROM books WHERE year=?;"
+            values = (query,)
+
+        return self._execute_search_main_attrs(stmt, values)
+
+    def search_category(self, query: _STR_QUERY) -> Sequence[Book]:
         ...
 
 
+
+
+
+
+
+
+
+
 # c = SQLiteLibraryConnector(":memory:")
-# def printer(c, stmt):
+# b1 = Book(title="Python 101", author="Monika", year=2023, coauthors={"Boop"}, categories={"programming", "python"})
+# b2 = Book(title="SQLite for dummies", author="Boop", year=2022, categories={"programming", "sql", "science"})
+# b3 = Book(title="Love", author="Monika", year=2024, categories={"romance", "novel"})
+
+# def execute(stmt):
 #     print(c._connection.execute(stmt).fetchall())
-# printer(c, "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%';")
-# b = Book(title="Python 101", author="Monika", year=2023, coauthors={"Boop"}, categories={"programming", "science"})
-# print(b)
-# c.add_book(b)
-# printer(c, "SELECT * FROM books;")
 
-# printer(c, "SELECT * FROM coauthors;")
-# printer(c, "SELECT * FROM j_book_coauthor;")
+# def print_tables():
+#     print("books:")
+#     execute("SELECT * FROM books;")
 
-# printer(c, "SELECT * FROM categories;")
-# printer(c, "SELECT * FROM j_book_category;")
+#     print("coauthors:")
+#     execute("SELECT * FROM coauthors;")
+#     execute("SELECT * FROM j_book_coauthor;")
+
+#     print("categories:")
+#     execute("SELECT * FROM categories;")
+#     execute("SELECT * FROM j_book_category;")
+
+# # print("tables:")
+# # execute("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%';")
+
+# # print("Added books")
+# c.add_book(b1)
+# c.add_book(b2)
+# c.add_book(b3)
+# # print_tables()
+
+# # print("Removed a book")
+# # c.remove_book(b1)
+# # print_tables()
+
+# # c._connection.set_trace_callback(lambda stmt: print(stmt))
+# # execute("SELECT * FROM books WHERE title LIKE 'Love';")
+
+
+# print(c.search_author("moni"))
+# print(c.search_author("boop"))
+# print(c.search_title("love"))
+# print(c.search_year(2022))
+# print(c.search_year((2020, 2025)))
