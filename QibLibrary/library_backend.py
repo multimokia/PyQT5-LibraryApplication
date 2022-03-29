@@ -215,7 +215,7 @@ CREATE TABLE IF NOT EXISTS j_book_category (
         REFERENCES categories (name)
         ON UPDATE CASCADE
         ON DELETE CASCADE,
-    CONSTRAINT pk PRIMARY KEY (title, year, category)
+    CONSTRAINT pk PRIMARY KEY (title, author, year, category)
 );
 
 CREATE TABLE IF NOT EXISTS j_book_coauthor (
@@ -231,7 +231,7 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         REFERENCES coauthors (name)
         ON UPDATE CASCADE
         ON DELETE CASCADE,
-    CONSTRAINT pk PRIMARY KEY (title, year, coauthor)
+    CONSTRAINT pk PRIMARY KEY (title, author, year, coauthor)
 );\
 """
 
