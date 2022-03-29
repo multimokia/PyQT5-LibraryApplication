@@ -99,10 +99,12 @@ class AbstractLibraryConnector(ABC):
     @abstractmethod
     def has_book(self, book: Book) -> bool:
         """
-        Check if this exact book exists in the db
+        Checks if a book exists
 
         IN:
-            book - a book obj to find
+            book - the book to find
+            full_check - if False, we only check main attributes
+                (like title, author, name), if False, we check all
 
         OUT:
             bool
@@ -258,13 +260,83 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 
     def _has_table(self, name: str) -> bool:
         query = (
-            "SELECT COUNT(*) FROM sqlite_master "
+            "SELECT COUNT(1) FROM sqlite_master "
             "WHERE type='table' AND name=(?);"
         )
         cur = self._connection.execute(query, (name,))
         return cur.fetchone()[0] > 0
 
+    def has_book(self, book: Book, full_check: bool = False) -> bool:
+        values: tuple[Any, ...]# Somehow mypy finds tuple[object] wtf
+
+        if not full_check:
+            stmt = (
+                "SELECT COUNT(1) FROM books "
+                "WHERE title=? AND author=? AND year=?;"
+            )
+            values = (book.title, book.author, book.year)
+
+        else:
+            if book.categories:
+                cats = tuple(book.categories)
+            else:
+                cats = ()
+            cats_q_marks = ", ".join("?"*len(cats))
+
+            if book.coauthors:
+                coauthors = tuple(book.coauthors)
+            else:
+                coauthors = ()
+            coauthors_q_marks = ", ".join("?"*len(coauthors))
+
+            select = "SELECT COUNT(1) FROM books b "
+            join_cat = (
+                "JOIN j_book_category jc "
+                "ON b.title=jc.title AND b.author=jc.author AND b.year=jc.year "
+            )
+            join_coauthor = (
+                "JOIN j_book_coauthor ja "
+                "ON b.title=ja.title AND b.author=ja.author AND b.year=ja.year "
+            )
+            where = (
+                "WHERE b.title=? AND b.author=? AND b.year=? "
+            )
+            and_cat_in = f"AND jc.category IN ({cats_q_marks}) "
+            and_coauthor_in = f"AND ja.coauthor in ({coauthors_q_marks})"
+            end = ";"
+
+            stmt = "{}{}{}{}{}{}{}".format(# pylint: disable=consider-using-f-string
+                select,
+                join_cat if cats else "",
+                join_coauthor if coauthors else "",
+                where,
+                and_cat_in if cats else "",
+                and_coauthor_in if coauthors else "",
+                end
+            )
+
+            values = (book.title, book.author, book.year) + cats + coauthors
+
+        try:
+            cur = self._connection.execute(stmt, values)
+
+        except sqlite3.Error as e:# pylint: disable=invalid-name
+            self._connection.rollback()
+            print(e)
+            return False
+
+        total_entries = cur.fetchone()[0]
+        # we need to use a min values of 1 even if we don't have a cat/co-author
+        i = max(len(cats), 1)
+        j = max(len(coauthors), 1)
+
+        # we should have cats*coauthors entries
+        return total_entries == i*j
+
     def add_book(self, book: Book) -> bool:
+        if self.has_book(book):
+            return False
+
         cur = self._connection.cursor()
         try:
             # Add the book
@@ -328,7 +400,9 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
         return True
 
     def remove_book(self, book: Book) -> bool:
-        cur = self._connection.cursor()
+        if not self.has_book(book):
+            return False
+
         try:
             # We only need to explicitly delete from the books table
             # j_book_category and j_book_coauthor will be
@@ -339,7 +413,7 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
                 "WHERE title=? AND author=? AND year=?;"
             )
             del_books_values = (book.title, book.author, book.year)
-            cur.execute(del_books_stmt, del_books_values)
+            self._connection.execute(del_books_stmt, del_books_values)
 
         except sqlite3.Error as e:# pylint: disable=invalid-name
             self._connection.rollback()
@@ -348,9 +422,6 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 
         self._connection.commit()
         return True
-
-    def has_book(self, book: Book) -> bool:
-        ...
 
     def _execute_get_sub_attrs(self, stmt, values) -> frozenset[Any]:
         """
@@ -535,7 +606,7 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 # # print_tables()
 
 # # print("Removed a book")
-# # c.remove_book(b1)
+# c.remove_book(b1)
 # # print_tables()
 
 # # c._connection.set_trace_callback(lambda stmt: print(stmt))
@@ -547,7 +618,13 @@ CREATE TABLE IF NOT EXISTS j_book_coauthor (
 # # print(c.search_title("love"))
 # # print(c.search_year(2022))
 # # print(c.search_year((2020, 2025)))
-# print(c.search_category("programming"))
-# print(c.search_category("sql"))
-# print(c.search_category("python"))
-# print(c.search_category({"language", "programming"}))
+# # print(c.search_category("programming"))
+# # print(c.search_category("sql"))
+# # print(c.search_category("python"))
+# # print(c.search_category({"language", "programming"}))
+# print(c.has_book(b1, full_check=False))
+# print(c.has_book(b2, full_check=False))
+# print(c.has_book(b3, full_check=False))
+# print(c.has_book(b1, full_check=True))
+# print(c.has_book(b2, full_check=True))
+# print(c.has_book(b3, full_check=True))
