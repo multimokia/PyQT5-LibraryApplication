@@ -39,7 +39,7 @@ from typing import (
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(eq=True, unsafe_hash=False, frozen=True, slots=True)
 class Book():
     """
     Represents a book
@@ -48,8 +48,8 @@ class Book():
     author: str
     year: int
     KW_ONLY# pylint: disable=pointless-statement
-    categories: Set[str] | None = None
-    coauthors: Set[str] | None = None
+    categories: Set[str] = frozenset()
+    coauthors: Set[str] = frozenset()
 
     def to_dict(self) -> MappingProxyType[str, Any]:
         """
@@ -260,7 +260,7 @@ CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
         self._init_db()
 
     def __del__(self) -> None:
-        self._connection.close()
+        self.close()
 
     def _init_db(self) -> None:
         """
@@ -273,7 +273,7 @@ CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
         """
         Closes connection to the db
         """
-        self.__del__()
+        self._connection.close()
 
     def _has_table(self, name: str) -> bool:
         query = (
@@ -589,65 +589,3 @@ CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
             values = (query,)
 
         return self._execute_search(stmt, values)
-
-
-
-
-
-
-
-
-
-
-# c = SQLiteLibraryConnector(":memory:")
-# b1 = Book(title="Python 101", author="Monika", year=2023, coauthors={"Boop"}, categories={"programming", "python", "language"})
-# b2 = Book(title="SQLite for dummies", author="Boop", year=2022, categories={"programming", "sql", "language"})
-# b3 = Book(title="Love", author="Monika", year=2024, categories={"romance", "novel"})
-
-# def execute(stmt):
-#     print(c._connection.execute(stmt).fetchall())
-
-# def print_tables():
-#     print("books:")
-#     execute("SELECT * FROM books;")
-
-#     print("coauthors:")
-#     execute("SELECT * FROM coauthors;")
-#     execute("SELECT * FROM j_book_coauthor;")
-
-#     print("categories:")
-#     execute("SELECT * FROM categories;")
-#     execute("SELECT * FROM j_book_category;")
-
-# # print("tables:")
-# # execute("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%';")
-
-# # print("Added books")
-# c.add_book(b1)
-# c.add_book(b2)
-# c.add_book(b3)
-# # print_tables()
-
-# # print("Removed a book")
-# c.remove_book(b1)
-# # print_tables()
-
-# # c._connection.set_trace_callback(lambda stmt: print(stmt))
-# # execute("SELECT * FROM books WHERE title LIKE 'Love';")
-
-
-# # print(c.search_author("moni"))
-# # print(c.search_author("boop"))
-# # print(c.search_title("love"))
-# # print(c.search_year(2022))
-# # print(c.search_year((2020, 2025)))
-# # print(c.search_category("programming"))
-# # print(c.search_category("sql"))
-# # print(c.search_category("python"))
-# # print(c.search_category({"language", "programming"}))
-# print(c.has_book(b1, full_check=False))
-# print(c.has_book(b2, full_check=False))
-# print(c.has_book(b3, full_check=False))
-# print(c.has_book(b1, full_check=True))
-# print(c.has_book(b2, full_check=True))
-# print(c.has_book(b3, full_check=True))
