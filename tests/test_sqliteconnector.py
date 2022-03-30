@@ -1,7 +1,9 @@
+"""
+Module with testcases for SQLiteLibraryConnector
+"""
 # pylint: disable=missing-function-docstring
-# import unittest
 from unittest import TestCase
-# import sqlite3
+
 # pylint: disable-next=import-error # There's no error if we run the tests from the root dir
 from QibLibrary.library_connectors import (
     SQLiteLibraryConnector,
