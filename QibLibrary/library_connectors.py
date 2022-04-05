@@ -64,6 +64,11 @@ class Book():
         """
         return cls(**dict_)
 
+    def __str__(self) -> str:
+        """
+        Returns a string representation of this book
+        """
+        return f"{self.title} by {self.author} ({self.year})"
 
 _STR_QUERY: TypeAlias = str
 _YEAR_QUERY: TypeAlias = Union[int, tuple[int, int]]# mypy doesn't like | here
@@ -520,13 +525,15 @@ CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
         return tuple(books)
 
     def search_title(self, query: str) -> Sequence[Book]:
-        stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE title=? COLLATE NOCASE;"
+        query = f"%{query}%"
+        stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE title LIKE ? COLLATE NOCASE;"
         values = (query,)
 
         return self._execute_search(stmt, values)
 
     def search_author(self, query: str) -> Sequence[Book]:
-        stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE author=? COLLATE NOCASE;"
+        query = f"%{query}%"
+        stmt = f"SELECT * FROM {self._TABLE_BOOKS} WHERE author LIKE ? COLLATE NOCASE;"
         values = (query,)
 
         return self._execute_search(stmt, values)
