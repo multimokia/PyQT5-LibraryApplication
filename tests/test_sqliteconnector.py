@@ -153,10 +153,9 @@ class SQLiteConnectorTest(TestCase):
     def test_search_title(self):
         self._add_books()
 
-        with self.subTest("Check can't find BAD title"):
-            self.assertFalse(self.connector.search_title("this should fail"))
-            python101 = self.books[0].title
-            self.assertFalse(self.connector.search_title(python101[:6]))
+        bad_title = "this should fail"
+        with self.subTest(f"Check can't find BAD title: {bad_title}"):
+            self.assertFalse(self.connector.search_title(bad_title))
 
         # pylint: disable=invalid-name
         for b in self.books:
@@ -172,10 +171,9 @@ class SQLiteConnectorTest(TestCase):
     def test_search_author(self):
         self._add_books()
 
-        with self.subTest("Check can't find BAD author"):
-            self.assertFalse(self.connector.search_author("Mr. I don't exist"))
-            piano = self.books[4].author
-            self.assertFalse(self.connector.search_author(piano[:3]))
+        bad_author = "Mr. I don't exist"
+        with self.subTest(f"Check can't find BAD author: {bad_author}"):
+            self.assertFalse(self.connector.search_author(bad_author))
 
         # pylint: disable=invalid-name
         for b in self.books:
