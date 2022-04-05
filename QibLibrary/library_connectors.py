@@ -64,6 +64,12 @@ class Book():
         """
         return cls(**dict_)
 
+    def toTuple(self):
+        """
+        Returns a tuple representation of this book
+        """
+        return (self.title, self.author, self.year, ", ".join(self.categories), ", ".join(self.coauthors))
+
     def __str__(self) -> str:
         """
         Returns a string representation of this book

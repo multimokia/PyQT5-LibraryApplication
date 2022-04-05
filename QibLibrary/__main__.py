@@ -1,7 +1,10 @@
-from frontend import menu, MenuOption, validatedInput
-from library_connectors import SQLiteLibraryConnector, Book
+from frontend import menu, MenuOption, validatedInput, tableMenu, buildTable, enterToContinue
+from library_connectors import AbstractLibraryConnector, SQLiteLibraryConnector, Book
 from typing import Callable, Sequence
+from session import Session
 import os
+
+_SESSION = Session()
 
 def main():
     """
@@ -16,26 +19,53 @@ def main():
 
     if CREATE_NEW_DB:
         connector.add_book(Book("The Great Gatsby", "F. Scott Fitzgerald", 1925, categories=["fiction"]))
-        connector.add_book(Book("Ren'Py for Dummies", "Monika", 2017, categories=["programming", "tutorial", "informational"]))
+        connector.add_book(Book("Ren'Py for Dummies", "Monika", 2017, categories=["programming", "tutorial", "informational", "renpy"]))
         connector.add_book(Book("Fahrenheit 451", "Ray Bradbury", 1953, categories=["fiction", "science", "dystopia"]))
         connector.add_book(Book("Brave New World", "Aldous Huxley", 1932, categories=["fiction", "dystopia"]))
         connector.add_book(Book("1984", "George Orwell", 1949, categories=["fiction", "dystopia"]))
+        connector.add_book(Book("The Martian", "Andy Weir", 2011, categories=["fiction", "dystopia"]))
+        connector.add_book(Book("The Lord of the Rings", "J. R. R. Tolkien", 1954, categories=["fiction"]))
+        connector.add_book(Book("The Hobbit", "J. R. R. Tolkien", 1937, categories=["fiction"]))
+        connector.add_book(Book("The Catcher in the Rye", "J. D. Salinger", 1951, categories=["fiction"]))
+        connector.add_book(Book("The Hunger Games", "Suzanne Collins", 2008, categories=["fiction", "dystopia", "battle"]))
+        connector.add_book(Book("Stacks and Queues", "Michael A. Harrison", 2017, categories=["programming", "tutorial", "informational"]))
+        connector.add_book(Book("The Art of Computer Programming", "Donald E. Knuth", 1968, categories=["programming", "tutorial", "informational"]))
+        connector.add_book(Book("The C Programming Language", "Dennis Ritchie", 1972, categories=["programming", "tutorial", "informational", "c"]))
+        connector.add_book(Book("The Little Prince", "Antoine de Saint-Exupéry", 1943, categories=["fiction"]))
+        connector.add_book(Book("The Count of Monte Cristo", "Alexandre Dumas", 1844, categories=["fiction"]))
+        connector.add_book(Book("The Hobbit: An Unexpected Journey", "J. R. R. Tolkien", 1937, categories=["fiction"]))
+        connector.add_book(Book("The Hobbit: The Desolation of Smaug", "J. R. R. Tolkien", 1937, categories=["fiction"]))
+        connector.add_book(Book("The Hobbit: The Battle of the Five Armies", "J. R. R. Tolkien", 1937, categories=["fiction"]))
+        connector.add_book(Book("The Hobbit: The Return of the King", "J. R. R. Tolkien", 1937, categories=["fiction"]))
+        connector.add_book(Book("The Hobbit: The Silmarillion", "J. R. R. Tolkien", 1937, categories=["fiction"]))
+        connector.add_book(Book("The Lord of the Rings: The Fellowship of the Ring", "J. R. R. Tolkien", 1954, categories=["fiction"]))
+        connector.add_book(Book("The Lord of the Rings: The Two Towers", "J. R. R. Tolkien", 1954, categories=["fiction"]))
+        connector.add_book(Book("Python Programming", "Monika", 2020, categories=["programming", "tutorial", "informational", "python"]))
 
     while True:
-        result: Callable[[SQLiteLibraryConnector|None]] = menu(
+        result: int|None = menu(
             "What would you like to do?",
-            MenuOption("Search for books", searchForBooks),
-            #MenuOption("Add a book", connector.add_book),
-            #MenuOption("Remove a book", connector.remove_book),
+            MenuOption("Search for books", 1),
+            MenuOption("View cart", 2),
+            MenuOption("Checkout", 3),
             MenuOption("Quit", None)
         )
 
+        #User wants to quit
         if result is None:
             break
 
-        result(connector)
-    return
-def searchForBooks(conn: SQLiteLibraryConnector):
+        if result == 1:
+            searchForBooks(connector)
+
+        elif result == 2:
+            viewCart()
+
+        elif result == 3:
+            checkout()
+
+
+def searchForBooks(conn: AbstractLibraryConnector):
     """
     Menu flow to search for books in the library
 
@@ -55,14 +85,99 @@ def searchForBooks(conn: SQLiteLibraryConnector):
 
     if len(books) == 0:
         print("No books found.")
+        enterToContinue()
 
-    #TODO: Put this into a table selector. The results can be selected and put into a "purchase" menu.
-    #From there, if the user wants to purchase the book, it can be added to the cart.
-    #After returning from the menu, the user is taken back to the search table with the same options.
-    for book in books:
-        print(book)
+    try:
+        while True:
+            selected_book = tableMenu(
+                "Add to cart",
+                buildTable(
+                    ["Title", "Author", "Year", "Categories", "Co-authors"],
+                    books,
+                    amt_padding=2
+                ),
+                books
+            )
 
-    input()
+            if selected_book is not None:
+                add_to_cart: bool = menu(
+                    f"Add {selected_book.title} to cart?",
+                    MenuOption("Yes", True),
+                    MenuOption("No", False)
+                )
+
+                if add_to_cart:
+                    _SESSION.cart.append(selected_book)
+
+    except KeyboardInterrupt:
+        print("\nExiting search...")
+        enterToContinue()
+
+def viewCart():
+    """
+    Menu flow to view the cart
+
+    OUT:
+        None
+    """
+    if len(_SESSION.cart) == 0:
+        print("Cart is empty.")
+        enterToContinue()
+        return
+
+    try:
+        while True:
+            selected_book = tableMenu(
+                "View cart (select an item to remove it from the cart)",
+                buildTable(
+                    ["Title", "Author", "Year", "Categories", "Co-authors"],
+                    _SESSION.cart,
+                    amt_padding=2
+                ),
+                _SESSION.cart
+            )
+
+            if selected_book is not None:
+                should_remove: bool = menu(
+                    f"Remove {selected_book.title} from cart?",
+                    MenuOption("Yes", True),
+                    MenuOption("No", False)
+                )
+
+                if should_remove:
+                    _SESSION.cart.remove(selected_book)
+
+    except KeyboardInterrupt:
+        print("\nExiting cart...")
+        enterToContinue()
+
+
+def checkout():
+    """
+    Menu flow to checkout books from the library
+    """
+    cart_empty: bool = len(_SESSION.cart) == 0
+
+    if cart_empty:
+        print("Cart is empty.")
+        enterToContinue()
+        return
+
+    print("Items in cart:")
+    for book in _SESSION.cart:
+        print(f"{book.title} by {book.author}")
+
+    enterToContinue()
+    checkout_cart: bool = menu(
+        "Checkout?",
+        MenuOption("Yes", True),
+        MenuOption("No", False)
+    )
+
+    if checkout_cart:
+        _SESSION.cart.clear()
+        print("Successfully checked out. Thank you for your purchase.")
+        enterToContinue()
 
 if __name__ == "__main__":
     main()
