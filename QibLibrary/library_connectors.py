@@ -64,11 +64,17 @@ class Book():
         """
         return cls(**dict_)
 
-    def toTuple(self):
+    def toTuple(self):# pylint: disable=invalid-name
         """
         Returns a tuple representation of this book
         """
-        return (self.title, self.author, self.year, ", ".join(self.categories), ", ".join(self.coauthors))
+        return (
+            self.title,
+            self.author,
+            self.year,
+            ", ".join(self.categories),
+            ", ".join(self.coauthors)
+        )
 
     def __str__(self) -> str:
         """

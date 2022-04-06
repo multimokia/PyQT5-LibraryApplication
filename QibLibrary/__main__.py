@@ -1,8 +1,28 @@
-from frontend import menu, MenuOption, validatedInput, tableMenu, buildTable, enterToContinue
-from library_connectors import AbstractLibraryConnector, SQLiteLibraryConnector, Book
-from typing import Callable, Sequence
-from session import Session
+"""
+Main module containing the entry point
+"""
+
 import os
+from typing import Callable, Sequence, TypeAlias, cast
+from collections import defaultdict
+
+# pylint: disable=import-error
+from .frontend import (
+    menu,
+    MenuOption,
+    validatedInput,
+    tableMenu,
+    buildTable,
+    enterToContinue
+)
+from .library_connectors import (
+    AbstractLibraryConnector,
+    SQLiteLibraryConnector,
+    Book
+)
+from .session import Session
+# pylint: enable=import-error
+
 
 _SESSION = Session()
 
@@ -11,39 +31,46 @@ def main():
     Main function for the QibLibrary.
     """
     #Set up the session's vars
-    _SESSION.cart = {} #dict[Book, int]
+    _SESSION.cart: defaultdict[Book, int] = defaultdict(int)
 
-    CREATE_NEW_DB = False
+    create_new_db = False
     if not os.path.isfile("./library.db"):
         print("No library database found. Creating new database...")
-        CREATE_NEW_DB = True
+        create_new_db = True
 
     connector = SQLiteLibraryConnector("./library.db")
 
-    if CREATE_NEW_DB:
-        connector.add_book(Book("The Great Gatsby", "F. Scott Fitzgerald", 1925, categories=["fiction"]))
-        connector.add_book(Book("Ren'Py for Dummies", "Monika", 2017, categories=["programming", "tutorial", "informational", "renpy"], co_authors=["Michael"]))
-        connector.add_book(Book("Fahrenheit 451", "Ray Bradbury", 1953, categories=["fiction", "science", "dystopia"]))
-        connector.add_book(Book("Brave New World", "Aldous Huxley", 1932, categories=["fiction", "dystopia"]))
-        connector.add_book(Book("1984", "George Orwell", 1949, categories=["fiction", "dystopia"]))
-        connector.add_book(Book("The Martian", "Andy Weir", 2011, categories=["fiction", "dystopia"]))
-        connector.add_book(Book("The Lord of the Rings", "J. R. R. Tolkien", 1954, categories=["fiction"]))
-        connector.add_book(Book("The Hobbit", "J. R. R. Tolkien", 1937, categories=["fiction"]))
-        connector.add_book(Book("The Catcher in the Rye", "J. D. Salinger", 1951, categories=["fiction"]))
-        connector.add_book(Book("The Hunger Games", "Suzanne Collins", 2008, categories=["fiction", "dystopia", "battle"]))
-        connector.add_book(Book("Stacks and Queues", "Michael A. Harrison", 2017, categories=["programming", "tutorial", "informational"]))
-        connector.add_book(Book("The Art of Computer Programming", "Donald E. Knuth", 1968, categories=["programming", "tutorial", "informational"]))
-        connector.add_book(Book("The C Programming Language", "Dennis Ritchie", 1972, categories=["programming", "tutorial", "informational", "c"]))
-        connector.add_book(Book("The Little Prince", "Antoine de Saint-Exupéry", 1943, categories=["fiction"]))
-        connector.add_book(Book("The Count of Monte Cristo", "Alexandre Dumas", 1844, categories=["fiction"]))
-        connector.add_book(Book("The Hobbit: An Unexpected Journey", "J. R. R. Tolkien", 1937, categories=["fiction"]))
-        connector.add_book(Book("The Hobbit: The Desolation of Smaug", "J. R. R. Tolkien", 1937, categories=["fiction"]))
-        connector.add_book(Book("The Hobbit: The Battle of the Five Armies", "J. R. R. Tolkien", 1937, categories=["fiction"]))
-        connector.add_book(Book("The Hobbit: The Return of the King", "J. R. R. Tolkien", 1937, categories=["fiction"]))
-        connector.add_book(Book("The Hobbit: The Silmarillion", "J. R. R. Tolkien", 1937, categories=["fiction"]))
-        connector.add_book(Book("The Lord of the Rings: The Fellowship of the Ring", "J. R. R. Tolkien", 1954, categories=["fiction"]))
-        connector.add_book(Book("The Lord of the Rings: The Two Towers", "J. R. R. Tolkien", 1954, categories=["fiction"]))
-        connector.add_book(Book("Python Programming", "Monika", 2020, categories=["programming", "tutorial", "informational", "python"]))
+    if create_new_db:
+        # pylint: disable=line-too-long
+        books = (
+            Book("The Great Gatsby", "F. Scott Fitzgerald", 1925, categories=["fiction"]),
+            Book("Ren'Py for Dummies", "Monika", 2017, categories=["programming", "tutorial", "informational", "renpy"], coauthors=["Michael"]),
+            Book("Fahrenheit 451", "Ray Bradbury", 1953, categories=["fiction", "science", "dystopia"]),
+            Book("Brave New World", "Aldous Huxley", 1932, categories=["fiction", "dystopia"]),
+            Book("1984", "George Orwell", 1949, categories=["fiction", "dystopia"]),
+            Book("The Martian", "Andy Weir", 2011, categories=["fiction", "dystopia"]),
+            Book("The Lord of the Rings", "J. R. R. Tolkien", 1954, categories=["fiction"]),
+            Book("The Hobbit", "J. R. R. Tolkien", 1937, categories=["fiction"]),
+            Book("The Catcher in the Rye", "J. D. Salinger", 1951, categories=["fiction"]),
+            Book("The Hunger Games", "Suzanne Collins", 2008, categories=["fiction", "dystopia", "battle"]),
+            Book("Stacks and Queues", "Michael A. Harrison", 2017, categories=["programming", "tutorial", "informational"]),
+            Book("The Art of Computer Programming", "Donald E. Knuth", 1968, categories=["programming", "tutorial", "informational"]),
+            Book("The C Programming Language", "Dennis Ritchie", 1972, categories=["programming", "tutorial", "informational", "c"]),
+            Book("The Little Prince", "Antoine de Saint-Exupéry", 1943, categories=["fiction"]),
+            Book("The Count of Monte Cristo", "Alexandre Dumas", 1844, categories=["fiction"]),
+            Book("The Hobbit: An Unexpected Journey", "J. R. R. Tolkien", 1937, categories=["fiction"]),
+            Book("The Hobbit: The Desolation of Smaug", "J. R. R. Tolkien", 1937, categories=["fiction"]),
+            Book("The Hobbit: The Battle of the Five Armies", "J. R. R. Tolkien", 1937, categories=["fiction"]),
+            Book("The Hobbit: The Return of the King", "J. R. R. Tolkien", 1937, categories=["fiction"]),
+            Book("The Hobbit: The Silmarillion", "J. R. R. Tolkien", 1937, categories=["fiction"]),
+            Book("The Lord of the Rings: The Fellowship of the Ring", "J. R. R. Tolkien", 1954, categories=["fiction"]),
+            Book("The Lord of the Rings: The Two Towers", "J. R. R. Tolkien", 1954, categories=["fiction"]),
+            Book("Python Programming", "Monika", 2020, categories=["programming", "tutorial", "informational", "python"]),
+        )
+        for book in books:
+            connector.add_book(book)
+        del book, books
+        # pylint: enable=line-too-long
 
     while True:
         result: int|None = menu(
@@ -67,15 +94,16 @@ def main():
         elif result == 3:
             checkout()
 
+_SearchMenuResult: TypeAlias = tuple[str, Callable[[str], Sequence[Book]]]
 
-def searchForBooks(conn: AbstractLibraryConnector):
+def searchForBooks(conn: AbstractLibraryConnector):# pylint: disable=invalid-name
     """
     Menu flow to search for books in the library
 
     IN:
         conn: SQLiteLibraryConnector object to perform search queries on
     """
-    result: tuple[str, Callable[[str, Sequence[Book]]]] = menu(
+    result: _SearchMenuResult = menu(
         "What would you like to search by?",
         MenuOption("Title", ("title", conn.search_title)),
         MenuOption("Author", ("author", conn.search_author)),
@@ -85,6 +113,7 @@ def searchForBooks(conn: AbstractLibraryConnector):
 
     search_for = validatedInput(f"Which {result[0]} would you like to search for?\n\n>  ", ".+")
     books: Sequence[Book] = result[1](search_for)
+    books = cast(list[Book], books)
 
     if len(books) == 0:
         print("No books found.")
@@ -111,23 +140,21 @@ def searchForBooks(conn: AbstractLibraryConnector):
                 )
 
                 if add_to_cart:
-                    if selected_book in _SESSION.cart:
-                        _SESSION.cart[selected_book] += 1
-                    else:
-                        _SESSION.cart[selected_book] = 1
+                    _SESSION.cart[selected_book] += 1# type: ignore
+
 
     except KeyboardInterrupt:
         print("\nExiting search...")
         enterToContinue()
 
-def viewCart():
+def viewCart():# pylint: disable=invalid-name
     """
     Menu flow to view the cart
 
     OUT:
         None
     """
-    if len(_SESSION.cart) == 0:
+    if not _SESSION.cart:
         print("Cart is empty.")
         enterToContinue()
         return
@@ -152,7 +179,8 @@ def viewCart():
                 )
 
                 if should_remove:
-                    _SESSION.cart[selected_book] -= 1
+                    if _SESSION.cart[selected_book] > 0:
+                        _SESSION.cart[selected_book] -= 1
 
                     if _SESSION.cart[selected_book] == 0:
                         _SESSION.cart.pop(selected_book)
@@ -166,7 +194,7 @@ def checkout():
     """
     Menu flow to checkout books from the library
     """
-    cart_empty: bool = len(_SESSION.cart) == 0
+    cart_empty: bool = not _SESSION.cart
 
     if cart_empty:
         print("Cart is empty.")
