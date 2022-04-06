@@ -10,6 +10,9 @@ def main():
     """
     Main function for the QibLibrary.
     """
+    #Set up the session's vars
+    _SESSION.cart = {} #dict[Book, int]
+
     CREATE_NEW_DB = False
     if not os.path.isfile("./library.db"):
         print("No library database found. Creating new database...")
@@ -19,7 +22,7 @@ def main():
 
     if CREATE_NEW_DB:
         connector.add_book(Book("The Great Gatsby", "F. Scott Fitzgerald", 1925, categories=["fiction"]))
-        connector.add_book(Book("Ren'Py for Dummies", "Monika", 2017, categories=["programming", "tutorial", "informational", "renpy"]))
+        connector.add_book(Book("Ren'Py for Dummies", "Monika", 2017, categories=["programming", "tutorial", "informational", "renpy"], co_authors=["Michael"]))
         connector.add_book(Book("Fahrenheit 451", "Ray Bradbury", 1953, categories=["fiction", "science", "dystopia"]))
         connector.add_book(Book("Brave New World", "Aldous Huxley", 1932, categories=["fiction", "dystopia"]))
         connector.add_book(Book("1984", "George Orwell", 1949, categories=["fiction", "dystopia"]))
@@ -86,6 +89,7 @@ def searchForBooks(conn: AbstractLibraryConnector):
     if len(books) == 0:
         print("No books found.")
         enterToContinue()
+        return
 
     try:
         while True:
@@ -107,7 +111,10 @@ def searchForBooks(conn: AbstractLibraryConnector):
                 )
 
                 if add_to_cart:
-                    _SESSION.cart.append(selected_book)
+                    if selected_book in _SESSION.cart:
+                        _SESSION.cart[selected_book] += 1
+                    else:
+                        _SESSION.cart[selected_book] = 1
 
     except KeyboardInterrupt:
         print("\nExiting search...")
@@ -131,10 +138,10 @@ def viewCart():
                 "View cart (select an item to remove it from the cart)",
                 buildTable(
                     ["Title", "Author", "Year", "Categories", "Co-authors"],
-                    _SESSION.cart,
+                    list(_SESSION.cart.keys()),
                     amt_padding=2
                 ),
-                _SESSION.cart
+                list(_SESSION.cart.keys())
             )
 
             if selected_book is not None:
@@ -145,7 +152,10 @@ def viewCart():
                 )
 
                 if should_remove:
-                    _SESSION.cart.remove(selected_book)
+                    _SESSION.cart[selected_book] -= 1
+
+                    if _SESSION.cart[selected_book] == 0:
+                        _SESSION.cart.pop(selected_book)
 
     except KeyboardInterrupt:
         print("\nExiting cart...")
@@ -164,8 +174,8 @@ def checkout():
         return
 
     print("Items in cart:")
-    for book in _SESSION.cart:
-        print(f"{book.title} by {book.author}")
+    for book, amt in _SESSION.cart.items():
+        print(f"{amt}x {book.title} by {book.author}")
 
     enterToContinue()
     checkout_cart: bool = menu(
