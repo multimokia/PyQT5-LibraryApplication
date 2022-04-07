@@ -31,7 +31,7 @@ def main():
     Main function for the QibLibrary.
     """
     #Set up the session's vars
-    _SESSION.cart: defaultdict[Book, int] = defaultdict(int)
+    _SESSION.cart: defaultdict[Book, int] = defaultdict(int) # type: ignore
 
     create_new_db = False
     if not os.path.isfile("./library.db"):
