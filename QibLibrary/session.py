@@ -15,5 +15,5 @@ class Session:
         """
         ...# pylint: disable=unnecessary-ellipsis
 
-    def __setattr__(self, __name: str, __value: Any) -> None:
-        self.__dict__[__name] = __value
+    def __getattr__(self, attr: str) -> Any:
+        return self.__dict__.get(attr)
