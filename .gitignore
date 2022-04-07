@@ -7,3 +7,4 @@ run_tests.bat
 *.db
 *.docx
 packages
+*.log

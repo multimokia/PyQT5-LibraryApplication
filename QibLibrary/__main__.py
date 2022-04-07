@@ -21,10 +21,13 @@ from .library_connectors import (
     Book
 )
 from .session import Session
+from .logs import createLogger
 # pylint: enable=import-error
 
 
+#Create a session object
 _SESSION = Session()
+_LOGGER = createLogger("QibLibraryMain")
 
 def main():
     """
@@ -32,6 +35,7 @@ def main():
     """
     #Set up the session's vars
     _SESSION.cart: defaultdict[Book, int] = defaultdict(int) # type: ignore
+    _LOGGER.info("Creating session...")
 
     create_new_db = False
     if not os.path.isfile("./library.db"):
@@ -41,6 +45,7 @@ def main():
     connector = SQLiteLibraryConnector("./library.db")
 
     if create_new_db:
+        _LOGGER.info("Existing database not found. Creating a new database.")
         # pylint: disable=line-too-long
         books = (
             Book("The Great Gatsby", "F. Scott Fitzgerald", 1925, categories=["fiction"]),
@@ -72,31 +77,36 @@ def main():
         del book, books
         # pylint: enable=line-too-long
 
-    while True:
-        result: int|None = menu(
-            "What would you like to do?",
-            MenuOption("Search for books", 1),
-            MenuOption("View cart", 2),
-            MenuOption("Checkout", 3),
-            MenuOption("Quit", None)
-        )
+    try:
+        while True:
+            result: int|None = menu(
+                "What would you like to do?",
+                MenuOption("Search for books", 1),
+                MenuOption("View cart", 2),
+                MenuOption("Checkout", 3),
+                MenuOption("Quit", None)
+            )
 
-        #User wants to quit
-        if result is None:
-            break
+            #User wants to quit
+            if result is None:
+                break
 
-        if result == 1:
-            searchForBooks(connector)
+            if result == 1:
+                searchForBooks(connector)
 
-        elif result == 2:
-            viewCart()
+            elif result == 2:
+                viewCart()
 
-        elif result == 3:
-            checkout()
+            elif result == 3:
+                checkout()
+
+    except KeyboardInterrupt:
+        print("\nExiting...")
+        exit(0)
 
 _SearchMenuResult: TypeAlias = tuple[str, Callable[[str], Sequence[Book]]]
 
-def searchForBooks(conn: AbstractLibraryConnector):# pylint: disable=invalid-name
+def searchForBooks(conn: AbstractLibraryConnector): # pylint: disable=invalid-name
     """
     Menu flow to search for books in the library
 
@@ -123,7 +133,7 @@ def searchForBooks(conn: AbstractLibraryConnector):# pylint: disable=invalid-nam
     try:
         while True:
             selected_book = tableMenu(
-                "Add to cart",
+                "Add to cart (ctrl+c to return)",
                 buildTable(
                     ["Title", "Author", "Year", "Categories", "Co-authors"],
                     books,
@@ -162,7 +172,7 @@ def viewCart():# pylint: disable=invalid-name
     try:
         while True:
             selected_book = tableMenu(
-                "View cart (select an item to remove it from the cart)",
+                "View cart (select an item to remove it from the cart, ctrl+c to exit)",
                 buildTable(
                     ["Title", "Author", "Year", "Categories", "Co-authors"],
                     list(_SESSION.cart.keys()),
@@ -213,6 +223,11 @@ def checkout():
     )
 
     if checkout_cart:
+        _checkout_items = ""
+        for book, amt in _SESSION.cart.items():
+            _checkout_items += f"{amt}x {book.title} by {book.author}\t"
+        _LOGGER.info(_checkout_items)
+
         _SESSION.cart.clear()
         print("Successfully checked out. Thank you for your purchase.")
         enterToContinue()
