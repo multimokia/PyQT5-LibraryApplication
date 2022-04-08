@@ -42,7 +42,7 @@ def main():
         print("No library database found. Creating new database...")
         create_new_db = True
 
-    connector = SQLiteLibraryConnector("./library.db")
+    connector = SQLiteLibraryConnector("./library.db", _LOGGER)
 
     if create_new_db:
         _LOGGER.info("Existing database not found. Creating a new database.")

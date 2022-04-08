@@ -38,6 +38,7 @@ from typing import (
     Any
 )
 
+from logging import Logger
 
 @dataclass(eq=True, unsafe_hash=False, frozen=True, slots=True)
 class Book():
@@ -263,15 +264,17 @@ CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
 );\
 """
 
-    def __init__(self, db_path: Path | _MEMORY_DB, **kwargs) -> None:
+    def __init__(self, db_path: Path | _MEMORY_DB, logger: Logger = None, **kwargs) -> None:
         """
         Constructor for library connector
 
         IN:
             db_path - path to the sqlite database
+            logger - a logging.Logger instance
             **kwargs - additional kwargs to use for connection object
         """
         self._db_path = db_path
+        self._logger = logger
         self._connection = sqlite3.connect(db_path, **kwargs)
 
         self._init_db()
@@ -434,7 +437,12 @@ CREATE TABLE IF NOT EXISTS {_TABLE_J_BOOK_COAUTHOR} (
 
         except sqlite3.Error as e:# pylint: disable=invalid-name
             self._connection.rollback()
-            print(e)# TODO: add logging pls
+
+            #Log if possible
+            if self._logger is not None:
+                self._logger.error(e)
+            else:
+                print(e)
             return False
 
         # Commit the changes
