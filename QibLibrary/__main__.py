@@ -150,7 +150,7 @@ def searchForBooks(conn: AbstractLibraryConnector): # pylint: disable=invalid-na
                 )
 
                 if add_to_cart:
-                    _SESSION.cart[selected_book] += 1# type: ignore
+                    _SESSION.cart[selected_book] += 1 # type: ignore
 
 
     except KeyboardInterrupt:
@@ -223,9 +223,10 @@ def checkout():
     )
 
     if checkout_cart:
-        _checkout_items = ""
-        for book, amt in _SESSION.cart.items():
-            _checkout_items += f"{amt}x {book.title} by {book.author}\t"
+        _checkout_items = "".join(
+            f"{amt}x {book.title} by {book.author}\n"
+            for book, amt in _SESSION.cart.items()
+        )
         _LOGGER.info(_checkout_items)
 
         _SESSION.cart.clear()
