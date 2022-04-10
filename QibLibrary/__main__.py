@@ -5,6 +5,7 @@ Main module containing the entry point
 import os
 from typing import Callable, Sequence, TypeAlias, cast
 from collections import defaultdict
+import datetime
 
 # pylint: disable=import-error
 from .frontend import (
@@ -157,7 +158,7 @@ def searchForBooks(conn: AbstractLibraryConnector): # pylint: disable=invalid-na
         print("\nExiting search...")
         enterToContinue()
 
-def viewCart():# pylint: disable=invalid-name
+def viewCart(): # pylint: disable=invalid-name
     """
     Menu flow to view the cart
 
@@ -230,7 +231,8 @@ def checkout():
         _LOGGER.info(_checkout_items)
 
         _SESSION.cart.clear()
-        print("Successfully checked out. Thank you for your purchase.")
+        print("Successfully checked out. Thank you for your visiting the QibLibrary.")
+        print(f"Books due back: {datetime.date.today() + datetime.timedelta(days=14)}")
         enterToContinue()
 
 if __name__ == "__main__":
